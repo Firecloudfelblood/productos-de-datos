@@ -38,7 +38,7 @@ db.init_app(app)
 # implementación de un API REST. Cambia el título y la descripción del proeyecto por uno
 # más acorde a lo que hace tu modelo predictivo.
 api = Api(
-    app, 
+    app,
     version='1.0', title='API REST',
     description='API REST para el Modelo de Ciencia de Datos',
 )
@@ -56,6 +56,7 @@ ns = api.namespace('predicciones', description='predicciones')
 # Consulta el script "models.py" para conocer y modificar los mapeos de tablas en la 
 # base de datos.
 from db_models import Prediction
+
 db.create_all()
 
 # =======================================================================================
@@ -74,9 +75,16 @@ observacion_repr = api.model('Observacion', {
     'petal_width': fields.Float(description="Anchura del pétalo"),
 })
 
-
 # =======================================================================================
-predictive_model = pickle.load(open('simple_model.pkl','rb'))
+predictive_model = pickle.load(open('simple_model.pkl', 'rb'))
+classified_observation = api.model('ObservacionCalificada', {
+    'sepal_length': fields.Float(description="Longitud del sépalo"),
+    'sepal_width': fields.Float(description="Anchura del sépalo"),
+    'petal_length': fields.Float(description="Longitud del pétalo"),
+    'petal_width': fields.Float(description="Anchura del pétalo"),
+    'class': fields.String(description='Clase real de la flor')
+})
+
 
 # =======================================================================================
 # Las siguientes clases modelan las solicitudes REST al API. Usamos el objeto del espacio
@@ -85,6 +93,8 @@ predictive_model = pickle.load(open('simple_model.pkl','rb'))
 
 # La siguiente línea indica que esta clase va a manejar los recursos que se encuentran en
 # el URI raíz (/), y que soporta los métodos GET y POST.
+
+
 @ns.route('/', methods=['GET', 'POST'])
 class PredictionListAPI(Resource):
     """ Manejador del listado de predicciones.
@@ -105,8 +115,8 @@ class PredictionListAPI(Resource):
         # disponibles para consultar la base de datos desde los modelos de Python.
         # https://flask-sqlalchemy.palletsprojects.com/en/2.x/queries/#querying-records
         return [
-            marshall_prediction(prediction) for prediction in Prediction.query.all()
-        ], 200
+                   marshall_prediction(prediction) for prediction in Prediction.query.all()
+               ], 200
 
     # -----------------------------------------------------------------------------------
     # La siguiente línea de código sirve para asegurar que el método POST recibe un
@@ -128,8 +138,8 @@ class PredictionListAPI(Resource):
         # Crea una observación para alimentar el modelo predicitivo, usando los
         # datos de entrada del API.
         model_data = [numpy.array([
-            prediction.sepal_length, prediction.sepal_width, 
-            prediction.petal_length, prediction.petal_width, 
+            prediction.sepal_length, prediction.sepal_width,
+            prediction.petal_length, prediction.petal_width,
         ])]
         prediction.predicted_class = str(predictive_model.predict(model_data)[0])
         print(prediction.predicted_class)
@@ -149,8 +159,35 @@ class PredictionListAPI(Resource):
         # de la nueva predicción, acompañados del código HTTP 201: Created
         return response, 201
 
+    # ----------------------------------------------------------------------------------
+@ns.route('/<int:prediction_id>', methods=['GET', 'PUT', 'PATCH'])
+class put_prediction(Resource):
+    @ns.expect(id)
+    def get(self, prediction_id):
+        """
+        procesamos solicitudes get
+        :param prediction_id: es el numero que identifica la prediccion
+        """
+        prediction = Prediction.query.filter_by(prediction_id = prediction_id).first()
+
+        if not prediction:
+            return 'El id {} no existre en la BD'.format(prediction_id), 404
+        else:
+            #el metodo lee la base de datos y regresa la prediccion
+            return marshall_prediction(prediction), 200
+
+    @ns.doc({'id': 'identificador de la prediccion'})
+    @ns.expect(classified_observation)
+    def put(self, prediction_id):
+        """
+        actualizamos  una observacion
+        """
+        return update_observation(prediction_id)
+
 
 # =======================================================================================
+
+
 def marshall_prediction(prediction):
     """ Función utilería para transofmrar una Predicción de la base de datos a una 
         representación de un recurso REST.
@@ -170,11 +207,28 @@ def marshall_prediction(prediction):
     }
     return response
 
+
 # ---------------------------------------------------------------------------------------
+
+
 def trunc(number, digits):
     """ Función utilería para truncar un número a un número de dígitos
     """
     import math
     stepper = 10.0 ** digits
     return math.trunc(stepper * number) / stepper
-    
+
+def update_observation(id):
+    """
+        """
+    prediction = Prediction.query.filter_by(prediction_id=id).first()
+    if not prediction:
+        return 'Id {} no existe en la base de datos'.format(id), 404
+    else:
+        # ---------------------------------------------------------------------------
+        # Modifica este bloque de código para actualizar la observación con la clase
+        # real. No olvides actualizar la observación en la base de datos, para poder
+        # calcular las métricas de desempeño del modelo.
+        print('Payload: {}'.format(api.payload))
+        return 'Observación actualizada', 200
+        # ---------------------------------------------------------------------------
